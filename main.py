@@ -228,35 +228,26 @@ def play_pcm(audio_bytes: bytes, sample_rate: int):
 # 6) LOOP PRINCIPAL
 # =====================================
 
-# async def main():
-#     while True:
-#         # audio_int16, quit_flag = record_audio_until_enter()
-#         # if quit_flag:
-#         #     print("Saindo.")
-#         #     break
-
-#         # if audio_int16 is None or len(audio_int16) == 0:
-#         #     continue
-
-#         # # 1) Transcrever com Transcribe Streaming (sem S3)
-#         # user_text = await transcribe_with_streaming(audio_int16)
-#         # if not user_text:
-#         #     print("Nenhum texto transcrito.")
-#         #     continue
-
-#         user_text = input("Escreva alguma coisa")
-
-#         # 2) Enviar texto para sua API REST
-#         _, audio_bytes, sr = call_bedrock_polly_api(user_text)
-
-#         # 3) Tocar áudio retornado
-#         play_pcm(audio_bytes, sr)
-
 async def main():
     global conversation_history
     global codigo_robo 
     codigo_robo = input("Digite o codigo do robo")
+    
     while True:
+
+#        audio_int16, quit_flag = record_audio_until_enter()
+#        if quit_flag:
+#            print("Saindo.")
+#            break
+
+#        if audio_int16 is None or len(audio_int16) == 0:
+#            continue
+            
+#        user_text = await transcribe_with_streaming(audio_int16)
+#        if not user_text:
+#            print("Nenhum texto transcrito.")
+#            continue
+            
         user_text = input("Escreva alguma coisa: ")
 
         # envia texto + histórico acumulado
