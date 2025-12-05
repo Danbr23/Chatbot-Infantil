@@ -1,0 +1,145 @@
+/* src/App.css */
+
+/* --- RESET GLOBAL --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Cores Globais */
+  --primary-color: #2563eb;
+  --primary-dark: #1e40af;
+  --accent-color: #8b5cf6;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --danger-color: #ef4444;
+
+  /* Vidro (Agora funcionará como card branco sólido com o fundo cinza) */
+  --glass-bg: #ffffff;
+  --glass-border: #e2e8f0;
+  --glass-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Fundo sólido limpo */
+  background-color: #f1f5f9; 
+  color: var(--text-main);
+  overflow-x: hidden;
+}
+
+/* --- Container Principal --- */
+.app-container {
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  /* Sem gradiente, apenas transparente para mostrar a cor do body */
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+.center-screen {
+  justify-content: center;
+  align-items: center;
+}
+
+/* --- (Removi as classes .bg-shape, .shape-1, etc.) --- */
+
+/* --- Cartões e Login --- */
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 3rem 2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1rem;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  /* Removemos o blur pois o fundo é solido, focamos na sombra/borda */
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
+}
+
+.icon-circle {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+  transform: rotate(-5deg);
+}
+
+.login-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-main); /* Cor sólida para leitura melhor no fundo limpo */
+}
+
+.login-subtitle {
+  color: var(--text-muted);
+  font-size: 1rem;
+  margin-top: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.divider {
+  width: 100%;
+  height: 1px;
+  background: #e2e8f0;
+  margin-bottom: 2rem;
+}
+
+.btn-login-gradient {
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+  color: white;
+  border: none;
+  padding: 14px 28px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+}
+
+.btn-login-gradient:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+  filter: brightness(1.1);
+}
+
+.footer-version {
+  margin-top: 2.5rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Utils */
+.loading-card, .error-card { padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.spinner-animate { animation: spin 1s linear infinite; color: var(--primary-color); }
+.error-card h3 { color: var(--danger-color); margin: 0; }
+.btn-secondary { background: transparent; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 6px; cursor: pointer; color: var(--text-muted); }
+.btn-secondary:hover { background: #f8fafc; color: var(--text-main); }
+.fade-in { animation: fadeIn 0.6s ease-out; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
