@@ -48,22 +48,20 @@ export const handler = async (event) => {
     // Garante que headers existe e normaliza as chaves para minúsculo
     const headers = event.headers || {};
     const normalizedHeaders = {};
-
+    
     Object.keys(headers).forEach((key) => {
       normalizedHeaders[key.toLowerCase()] = headers[key];
     });
 
     // Busca o header 'authorization' (agora garantido estar em minúsculo se existir)
-    const rawToken = normalizedHeaders["authorization"];
+    const rawToken = normalizedHeaders['authorization'];
 
     if (!rawToken) {
       console.warn("Header Authorization não encontrado no evento.");
       return {
         statusCode: 401,
         headers: headersCORS,
-        body: JSON.stringify({
-          message: "Token de autorização não fornecido.",
-        }),
+        body: JSON.stringify({ message: "Token de autorização não fornecido." }),
       };
     }
 
@@ -99,8 +97,8 @@ export const handler = async (event) => {
       password: dbPassword,
       port: 5432,
       ssl: {
-        rejectUnauthorized: false,
-      },
+        rejectUnauthorized: false
+      }
     });
 
     await dbClient.connect();
@@ -140,6 +138,7 @@ export const handler = async (event) => {
       headers: headersCORS,
       body: JSON.stringify(robosRes.rows),
     };
+
   } catch (err) {
     console.error("Erro na execução da Lambda:", err);
 
@@ -152,6 +151,7 @@ export const handler = async (event) => {
       headers: headersCORS,
       body: JSON.stringify({ message: message }),
     };
+
   } finally {
     // 7. FECHAMENTO DA CONEXÃO (SEMPRE EXECUTADO)
     if (dbClient) {
