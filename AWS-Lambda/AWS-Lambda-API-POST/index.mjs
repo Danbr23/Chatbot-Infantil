@@ -136,15 +136,10 @@ export const handler = async (event) => {
 // 1. Criar Robô (Com transação, nome e histórico inicial)
 async function createRobot(client, userId, body) {
   // Extraímos explicitamente o 'name' do corpo da requisição
-  const { code, name, params } = body;
+  const { code, name, params } = body; 
 
-  if (!code)
-    throw { statusCode: 400, message: "O campo 'code' é obrigatório." };
-  if (!name)
-    throw {
-      statusCode: 400,
-      message: "O campo 'name' (nome do robô) é obrigatório.",
-    };
+  if (!code) throw { statusCode: 400, message: "O campo 'code' é obrigatório." };
+  if (!name) throw { statusCode: 400, message: "O campo 'name' (nome do robô) é obrigatório." };
 
   try {
     await client.query("BEGIN"); // Inicia Transação
@@ -160,8 +155,7 @@ async function createRobot(client, userId, body) {
     const newRoboId = resRobo.rows[0].id;
 
     // --- PASSO 2: Inserir na tabela PARAMETROS_INICIAIS ---
-    const paramsText =
-      typeof params === "object" ? JSON.stringify(params) : params;
+    const paramsText = typeof params === "object" ? JSON.stringify(params) : params;
 
     const insertParamsQuery = `
       INSERT INTO parametros_iniciais (id_usuario_cognito, preferencias_iniciais, id_robo)
