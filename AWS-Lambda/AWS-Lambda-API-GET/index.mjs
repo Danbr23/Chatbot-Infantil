@@ -1,11 +1,20 @@
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
+import crypto from "crypto";
+import {
+  KMSClient,
+  DecryptCommand,
+} from "@aws-sdk/client-kms";
 
 // --- CONFIGURAÇÕES ---
 const region = "us-east-1";
 const userPoolId = process.env.COGNITO_USER_POOL_ID;
 const appClientId = process.env.COGNITO_APP_CLIENT_ID;
+const kmsKeyId = process.env.KMS_KEY_ID;
+
+// KMS client
+const kms = new KMSClient({ region });
 
 // Credenciais do banco de dados
 const dbHost = process.env.DB_HOST;
@@ -37,24 +46,36 @@ const getKey = (header, callback) => {
   });
 };
 
+// --- CRIPTO: decrypt AES-256-GCM com layout [IV(12)][TAG(16)][CIPHERTEXT] ---
+function decryptWithDataKey(buffer, dataKeyBuffer) {
+  if (!buffer || buffer.length === 0) return "";
+
+  const iv = buffer.subarray(0, 12);
+  const tag = buffer.subarray(12, 28);
+  const ciphertext = buffer.subarray(28);
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", dataKeyBuffer, iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+
+  return decrypted.toString("utf8");
+}
+
+// --- HANDLER PRINCIPAL ---
 export const handler = async (event) => {
-  // 1. LOG DE DEBUG: Essencial para ver o que o API Gateway enviou
   console.log("EVENTO RECEBIDO:", JSON.stringify(event, null, 2));
 
   let dbClient;
 
   try {
-    // 2. EXTRAÇÃO SEGURA DOS HEADERS
-    // Garante que headers existe e normaliza as chaves para minúsculo
+    // 1. EXTRAÇÃO SEGURA DOS HEADERS
     const headers = event.headers || {};
     const normalizedHeaders = {};
-    
     Object.keys(headers).forEach((key) => {
       normalizedHeaders[key.toLowerCase()] = headers[key];
     });
 
-    // Busca o header 'authorization' (agora garantido estar em minúsculo se existir)
-    const rawToken = normalizedHeaders['authorization'];
+    const rawToken = normalizedHeaders["authorization"];
 
     if (!rawToken) {
       console.warn("Header Authorization não encontrado no evento.");
@@ -65,11 +86,9 @@ export const handler = async (event) => {
       };
     }
 
-    // 3. LIMPEZA DO TOKEN
-    // Remove "Bearer " (case insensitive) usando Regex
     const tokenClean = rawToken.replace(/^Bearer\s+/i, "");
 
-    // 4. VALIDAÇÃO DO JWT
+    // 2. VALIDAÇÃO DO JWT
     const decoded = await new Promise((resolve, reject) => {
       jwt.verify(
         tokenClean,
@@ -89,7 +108,7 @@ export const handler = async (event) => {
     const userId = decoded.sub;
     console.log("Usuário autenticado:", userId);
 
-    // 5. CONEXÃO E CONSULTA AO BANCO
+    // 3. CONEXÃO AO BANCO
     dbClient = new Client({
       host: dbHost,
       database: dbName,
@@ -97,52 +116,117 @@ export const handler = async (event) => {
       password: dbPassword,
       port: 5432,
       ssl: {
-        rejectUnauthorized: false
-      }
+        rejectUnauthorized: false,
+      },
     });
 
     await dbClient.connect();
 
+    // 4. Buscar robôs + parâmetros + histórico + dek_encrypted
     const robosRes = await dbClient.query(
-      `SELECT
-    -- Dados do Robô
-    r.id AS robo_id,
-    r.codigo AS robo_codigo,
-    r.nome AS robo_nome,
-    r.status AS robo_status,
-    r.created_at AS robo_criacao,
+      `
+      SELECT
+        -- Dados do Robô
+        r.id AS robo_id,
+        r.codigo AS robo_codigo,
+        r.nome AS robo_nome,
+        r.status AS robo_status,
+        r.created_at AS robo_criacao,
+        r.dek_encrypted AS robo_dek_encrypted,
 
-    -- Dados dos Parâmetros Iniciais
-    pi.id AS param_id,
-    pi.id_usuario_cognito,
-    pi.preferencias_iniciais,
+        -- Dados dos Parâmetros Iniciais
+        pi.id AS param_id,
+        pi.id_usuario_cognito,
+        pi.preferencias_iniciais,
 
-    -- Dados do Histórico
-    hc.id AS historico_id,
-    hc.historico AS conteudo_conversa,
-    hc.data_registro AS data_conversa
+        -- Dados do Histórico
+        hc.id AS historico_id,
+        hc.historico AS conteudo_conversa,
+        hc.data_registro AS data_conversa
 
-    FROM robo r
-    -- Junta com parâmetros para filtrar pelo dono do robô
-    INNER JOIN parametros_iniciais pi ON r.id = pi.id_robo
-    -- Junta com histórico (LEFT JOIN para trazer o robô mesmo se não houver conversa ainda)
-    LEFT JOIN historico_conversa hc ON r.id = hc.id_robo
-
-    WHERE pi.id_usuario_cognito = $1;`,
+      FROM robo r
+      INNER JOIN parametros_iniciais pi ON r.id = pi.id_robo
+      LEFT JOIN historico_conversa hc ON r.id = hc.id_robo
+      WHERE pi.id_usuario_cognito = $1;
+      `,
       [userId]
     );
+
+    const rows = robosRes.rows;
+
+    // 5. Para cada robô, decifrar prefs + histórico usando o DEK do robo
+    const result = [];
+
+    for (const row of rows) {
+      const dekEncrypted = row.robo_dek_encrypted; // BYTEA -> Buffer no node-postgres
+      let decryptedPrefs = null;
+      let decryptedHistory = null;
+
+      if (dekEncrypted) {
+        // Decriptar DEK com KMS
+        const decryptResp = await kms.send(
+          new DecryptCommand({
+            KeyId: kmsKeyId,
+            CiphertextBlob: dekEncrypted,
+            EncryptionContext: { service: "chatbot_infantil" },
+          })
+        );
+        const dataKey = Buffer.from(decryptResp.Plaintext);
+
+        // prefs
+        if (row.preferencias_iniciais) {
+          const prefsBuf = Buffer.isBuffer(row.preferencias_iniciais)
+            ? row.preferencias_iniciais
+            : Buffer.from(row.preferencias_iniciais, "base64"); // fallback se estiver como texto
+          const prefsText = decryptWithDataKey(prefsBuf, dataKey);
+          let prefsParsed = null;
+          if (prefsText && prefsText.trim() !== "") {
+            try {
+              prefsParsed = JSON.parse(prefsText);   // se for JSON válido
+            } catch (e) {
+              // se não for JSON, trata como string simples
+              prefsParsed = prefsText;
+            }
+          }
+          decryptedPrefs = prefsParsed;
+        }
+
+        // histórico (pode estar vazio ou null)
+        if (row.conteudo_conversa) {
+          const histBuf = Buffer.isBuffer(row.conteudo_conversa)
+            ? row.conteudo_conversa
+            : Buffer.from(row.conteudo_conversa, "base64");
+          const histText = decryptWithDataKey(histBuf, dataKey);
+          decryptedHistory = histText || "";
+        }
+      }
+
+      result.push({
+        robo_id: row.robo_id,
+        robo_codigo: row.robo_codigo,
+        robo_nome: row.robo_nome,
+        robo_status: row.robo_status,
+        robo_criacao: row.robo_criacao,
+
+        param_id: row.param_id,
+        id_usuario_cognito: row.id_usuario_cognito,
+        preferencias_iniciais: decryptedPrefs, // já em JSON
+
+        historico_id: row.historico_id,
+        conteudo_conversa: decryptedHistory,   // string JSON ou "", dependendo do que você salvar
+        data_conversa: row.data_conversa,
+      });
+    }
 
     // 6. RETORNO DE SUCESSO
     return {
       statusCode: 200,
       headers: headersCORS,
-      body: JSON.stringify(robosRes.rows),
+      body: JSON.stringify(result),
     };
-
   } catch (err) {
     console.error("Erro na execução da Lambda:", err);
 
-    // Tratamento para erros personalizados (como o do JWT reject acima) vs erros genéricos
     const statusCode = err.statusCode || 500;
     const message = err.message || "Erro interno no servidor";
 
@@ -151,9 +235,7 @@ export const handler = async (event) => {
       headers: headersCORS,
       body: JSON.stringify({ message: message }),
     };
-
   } finally {
-    // 7. FECHAMENTO DA CONEXÃO (SEMPRE EXECUTADO)
     if (dbClient) {
       try {
         await dbClient.end();
